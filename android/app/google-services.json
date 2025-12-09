@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "434112777646",
+    "project_id": "belleza2-d2ff1",
+    "storage_bucket": "belleza2-d2ff1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:434112777646:android:9f82b25d8d26a8b4910c3f",
+        "android_client_info": {
+          "package_name": "com.example.paulette"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDyVHXg6OVOHWjJVWb7N1qlwmNy8Pxs9bA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
