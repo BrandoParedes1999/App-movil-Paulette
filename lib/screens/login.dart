@@ -38,21 +38,16 @@ class _LoginState extends State<Login> {
     if (!mounted) return;
 
     if (result['success']) {
-      // Login exitoso
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('¡Bienvenido!'), backgroundColor: Colors.green),
+        const SnackBar(content: Text('¡Bienvenido!'), backgroundColor: Colors.green),
       );
 
-      // Navegar según el tipo de usuario
       if (result['isAdmin']) {
-        // Navegar a pantalla de admin
         Navigator.pushReplacementNamed(context, '/menuadmin');
       } else {
-        // Navegar a pantalla de usuario normal
         Navigator.pushReplacementNamed(context, '/menuclient');
       }
     } else {
-      // Mostrar error
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(result['message'] ?? 'Error al iniciar sesión'),
@@ -67,7 +62,7 @@ class _LoginState extends State<Login> {
     
     showDialog(
       context: context,
-      builder: (dialogContext) { // Renombramos a dialogContext para no confundir
+      builder: (dialogContext) { 
         bool isResetting = false; 
 
         return StatefulBuilder(
@@ -78,7 +73,7 @@ class _LoginState extends State<Login> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text(
-                    "Ingresa tu correo registrado y te enviaremos un enlace, verificar en su bandeja de SPAM",
+                    "Ingresa tu correo. Si existe, te enviaremos un enlace. Si no, te redirigiremos al registro.",
                     style: TextStyle(fontSize: 14, color: Colors.grey),
                   ),
                   const SizedBox(height: 15),
@@ -106,30 +101,52 @@ class _LoginState extends State<Login> {
                   onPressed: isResetting
                       ? null
                       : () async {
-                          if (emailResetController.text.trim().isEmpty) {
+                          final email = emailResetController.text.trim();
+                          if (email.isEmpty) {
                              ScaffoldMessenger.of(dialogContext).showSnackBar(
                                 const SnackBar(content: Text('Por favor escribe un correo')),
                              );
                              return;
                           }
 
-                          // 1. Activamos carga (Solo si el diálogo sigue abierto)
                           if (dialogContext.mounted) {
                             setStateDialog(() => isResetting = true);
                           }
 
-                          // 2. Llamamos al servicio (Guardamos el resultado)
-                          final result = await _authService.resetPassword(
-                            emailResetController.text,
-                          );
+                          // 1. VERIFICAMOS SI EXISTE EL USUARIO EN LA BASE DE DATOS
+                          final bool exists = await _authService.checkUserExists(email);
 
-                          // 3. Verificamos si el DIÁLOGO sigue abierto para cerrarlo
+                          if (!exists) {
+                            // --- CASO: NO EXISTE ---
+                            // Cerramos el diálogo de carga
+                            if (dialogContext.mounted) {
+                               setStateDialog(() => isResetting = false);
+                               Navigator.pop(dialogContext); // Cerramos el popup
+                            }
+                            
+                            // Mostramos mensaje y redirigimos
+                            if (mounted) {
+                              ScaffoldMessenger.of(this.context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Correo no registrado. Redirigiendo al registro...'),
+                                  backgroundColor: Colors.orange,
+                                  duration: Duration(seconds: 3),
+                                ),
+                              );
+                              // Navegamos al registro automáticamente
+                              Navigator.pushNamed(this.context, '/registre');
+                            }
+                            return; 
+                          }
+
+                          // --- CASO: SÍ EXISTE ---
+                          // 2. Enviamos el correo de recuperación
+                          final result = await _authService.resetPassword(email);
+
                           if (dialogContext.mounted) {
                              Navigator.pop(dialogContext);
                           }
 
-                          // 4. Mostramos el resultado usando el context de la PANTALLA PRINCIPAL
-                          // (Usamos 'mounted' del _LoginState, no del diálogo)
                           if (mounted) {
                             ScaffoldMessenger.of(this.context).showSnackBar(
                               SnackBar(
@@ -139,7 +156,7 @@ class _LoginState extends State<Login> {
                             );
                           }
                         },
-                  child: const Text('Enviar'),
+                  child: const Text('Continuar'),
                 ),
               ],
             );
@@ -151,9 +168,6 @@ class _LoginState extends State<Login> {
 
   @override
   Widget build(BuildContext context) {
-    // Usamos MediaQuery para diseño responsivo básico
-    final size = MediaQuery.of(context).size;
-
     return Scaffold(
       backgroundColor: Colors.white,
       body: Center(
@@ -164,12 +178,11 @@ class _LoginState extends State<Login> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Logo con Hero animation (opcional pero se ve pro)
                 Hero(
                   tag: 'logo',
                   child: Image.asset(
                     "assets/images/logo_principal.png",
-                    height: 180, // Un poco más pequeño para dar aire
+                    height: 180, 
                   ),
                 ),
                 const SizedBox(height: 40),
@@ -180,7 +193,6 @@ class _LoginState extends State<Login> {
                 ),
                 const SizedBox(height: 20),
 
-                // CAMPO EMAIL (Sin definir bordes, toma el del main.dart)
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
@@ -198,7 +210,6 @@ class _LoginState extends State<Login> {
 
                 const SizedBox(height: 20),
 
-                // CAMPO PASSWORD
                 TextFormField(
                   controller: _passwordController,
                   obscureText: _obscurePassword,
@@ -226,7 +237,6 @@ class _LoginState extends State<Login> {
 
                 const SizedBox(height: 10),
 
-                // Botón Olvidaste contraseña alineado a la derecha
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
@@ -237,9 +247,8 @@ class _LoginState extends State<Login> {
 
                 const SizedBox(height: 20),
 
-                // BOTÓN LOGIN
                 SizedBox(
-                  width: double.infinity, // Ocupa todo el ancho disponible
+                  width: double.infinity, 
                   height: 55,
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _handleLogin,
@@ -258,7 +267,6 @@ class _LoginState extends State<Login> {
 
                 const SizedBox(height: 20),
 
-                // Footer registro
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [

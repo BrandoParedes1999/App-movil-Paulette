@@ -13,6 +13,24 @@ class AuthService {
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
   // -----------------------------------------------------------------------------
+  // NUEVO: VERIFICAR SI EL USUARIO EXISTE (Para recuperar contraseña)
+  // ---
+
+  Future<bool> checkUserExists(String email) async {
+    try {
+      final QuerySnapshot result = await _firestore
+          .collection('users')
+          .where('email', isEqualTo: email.trim())
+          .limit(1)
+          .get();
+      return result.docs.isNotEmpty;
+    } catch (e) {
+      print("Error verificando usuario: $e");
+      return false;
+    }
+  }
+
+  // -----------------------------------------------------------------------------
   // INICIAR SESIÓN
   // -----------------------------------------------------------------------------
   Future<Map<String, dynamic>> signIn(String email, String password) async {
@@ -24,7 +42,7 @@ class AuthService {
       );
 
       User? user = result.user;
-      
+
       if (user != null) {
         // 2. Obtener datos extras de Firestore (Rol, nombre, etc.)
         DocumentSnapshot userDoc = await _firestore
@@ -39,7 +57,7 @@ class AuthService {
           userData = userDoc.data() as Map<String, dynamic>?;
           // Verificamos si tiene la bandera de admin
           isUserAdmin = userData?['isAdmin'] == true;
-        } 
+        }
 
         return {
           'success': true,
@@ -49,7 +67,6 @@ class AuthService {
         };
       }
       return {'success': false, 'message': 'Error desconocido'};
-      
     } on FirebaseAuthException catch (e) {
       return {'success': false, 'message': _handleAuthError(e.code)};
     } catch (e) {
@@ -87,7 +104,7 @@ class AuthService {
           'telefono2': telefono2 ?? '',
           'tieneDiabetes': tieneDiabetes,
           'tieneAlergia': tieneAlergia,
-          'isAdmin': false, 
+          'isAdmin': false,
           'createdAt': FieldValue.serverTimestamp(),
           'role': 'client', // Definimos rol explícito
         });
@@ -139,11 +156,11 @@ class AuthService {
       await _firestore.collection('users').doc(userCredential.user!.uid).set({
         'uid': userCredential.user!.uid,
         'email': email,
-        'nombre': name,        // Antes decia 'name', corregido a 'nombre'
-        'telefono': phone,     // Antes decia 'phoneNumber', corregido a 'telefono'
+        'nombre': name, // Antes decia 'name', corregido a 'nombre'
+        'telefono': phone, // Antes decia 'phoneNumber', corregido a 'telefono'
         'telefono2': '',
         'role': 'admin',
-        'isAdmin': true,       // Bandera admin activada
+        'isAdmin': true, // Bandera admin activada
         'createdAt': FieldValue.serverTimestamp(),
         'tieneDiabetes': 'No',
         'tieneAlergia': 'No',
@@ -163,7 +180,7 @@ class AuthService {
   // -----------------------------------------------------------------------------
   // OTROS MÉTODOS
   // -----------------------------------------------------------------------------
-  
+
   Future<void> signOut() async {
     await _auth.signOut();
   }
@@ -173,7 +190,8 @@ class AuthService {
       await _auth.sendPasswordResetEmail(email: email.trim());
       return {
         'success': true,
-        'message': 'Se ha enviado un correo para restablecer tu contraseña',
+        'message':
+            'Se ha enviado un correo para restablecer tu contraseña, verifica en su bandeja de SPAM',
       };
     } on FirebaseAuthException catch (e) {
       return {'success': false, 'message': _handleAuthError(e.code)};
@@ -188,7 +206,7 @@ class AuthService {
             .collection('users')
             .doc(user.uid)
             .get();
-        
+
         if (doc.exists) {
           return doc.data() as Map<String, dynamic>?;
         }
