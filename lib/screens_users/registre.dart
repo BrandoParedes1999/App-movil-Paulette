@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:paulette/services/auth_service.dart';
+import 'package:flutter/services.dart';
 
 class Registre extends StatefulWidget {
   const Registre({super.key});
@@ -20,7 +21,8 @@ class _RegistreState extends State<Registre> {
   final TextEditingController _allergyController = TextEditingController();
 
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
 
   // Variables de estado
   String _diabetesValue = 'No';
@@ -31,12 +33,12 @@ class _RegistreState extends State<Registre> {
   @override
   void initState() {
     super.initState();
-    // TRUCO PRO: Si el usuario cambia la contraseña original, 
+    // TRUCO PRO: Si el usuario cambia la contraseña original,
     // forzamos la re-validación del campo de confirmación para que se actualice el error.
     _passwordController.addListener(() {
       if (_confirmPasswordController.text.isNotEmpty) {
         // Solo validamos si ya escribió algo en confirmación
-        _formKey.currentState?.validate(); 
+        _formKey.currentState?.validate();
       }
     });
   }
@@ -63,9 +65,13 @@ class _RegistreState extends State<Registre> {
       password: _passwordController.text,
       nombre: _nameController.text,
       telefono: _phoneController.text,
-      telefono2: _phone2Controller.text.isNotEmpty ? _phone2Controller.text : null,
+      telefono2: _phone2Controller.text.isNotEmpty
+          ? _phone2Controller.text
+          : null,
       tieneDiabetes: _diabetesValue,
-      tieneAlergia: _allergyController.text.isEmpty ? 'Ninguna' : _allergyController.text,
+      tieneAlergia: _allergyController.text.isEmpty
+          ? 'Ninguna'
+          : _allergyController.text,
     );
 
     setState(() => _isLoading = false);
@@ -100,7 +106,11 @@ class _RegistreState extends State<Registre> {
         backgroundColor: Colors.white,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
-        titleTextStyle: const TextStyle(color: Colors.black, fontSize: 20, fontWeight: FontWeight.bold),
+        titleTextStyle: const TextStyle(
+          color: Colors.black,
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+        ),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -108,13 +118,17 @@ class _RegistreState extends State<Registre> {
           child: Form(
             key: _formKey,
             // ESTA LÍNEA HACE LA MAGIA: Valida mientras el usuario interactúa
-            autovalidateMode: AutovalidateMode.onUserInteraction, 
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Text(
                   "Datos Personales",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
+                  ),
                 ),
                 const SizedBox(height: 15),
 
@@ -122,8 +136,15 @@ class _RegistreState extends State<Registre> {
                 TextFormField(
                   controller: _nameController,
                   textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(labelText: 'Nombre Completo', prefixIcon: Icon(Icons.person_outline)),
-                  validator: (v) => v!.isEmpty ? 'El nombre es obligatorio' : null,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[a-zA-ZñÑáéíóúÁÉÍÓÚ\s]')),
+                  ],
+                  decoration: const InputDecoration(
+                    labelText: 'Nombre Completo',
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
+                  validator: (v) =>
+                      v!.isEmpty ? 'El nombre es obligatorio' : null,
                 ),
                 const SizedBox(height: 15),
 
@@ -131,9 +152,13 @@ class _RegistreState extends State<Registre> {
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'Correo Electrónico', prefixIcon: Icon(Icons.email_outlined)),
+                  decoration: const InputDecoration(
+                    labelText: 'Correo Electrónico',
+                    prefixIcon: Icon(Icons.email_outlined),
+                  ),
                   validator: (v) {
-                    if (v == null || v.isEmpty) return 'El correo es obligatorio';
+                    if (v == null || v.isEmpty)
+                      return 'El correo es obligatorio';
                     if (!v.contains('@')) return 'Ingresa un correo válido';
                     return null;
                   },
@@ -144,8 +169,12 @@ class _RegistreState extends State<Registre> {
                 TextFormField(
                   controller: _phoneController,
                   keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(labelText: 'Teléfono Celular', prefixIcon: Icon(Icons.phone_android)),
-                  validator: (v) => v!.length < 10 ? 'Ingresa un número de 10 dígitos' : null,
+                  decoration: const InputDecoration(
+                    labelText: 'Teléfono Celular',
+                    prefixIcon: Icon(Icons.phone_android),
+                  ),
+                  validator: (v) =>
+                      v!.length < 10 ? 'Ingresa un número de 10 dígitos' : null,
                 ),
                 const SizedBox(height: 15),
 
@@ -153,27 +182,38 @@ class _RegistreState extends State<Registre> {
                 TextFormField(
                   controller: _phone2Controller,
                   keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(labelText: 'Teléfono Alternativo (Opcional)', prefixIcon: Icon(Icons.phone)),
+                  decoration: const InputDecoration(
+                    labelText: 'Teléfono Alternativo (Opcional)',
+                    prefixIcon: Icon(Icons.phone),
+                  ),
                 ),
                 const SizedBox(height: 25),
 
                 const Text(
                   "Información de Salud",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
+                  ),
                 ),
                 const SizedBox(height: 15),
 
                 // DIABETES (Dropdown)
                 DropdownButtonFormField<String>(
                   value: _diabetesValue,
-                  decoration: const InputDecoration(labelText: '¿Padece Diabetes?', prefixIcon: Icon(Icons.medical_services_outlined)),
+                  decoration: const InputDecoration(
+                    labelText: '¿Padece Diabetes?',
+                    prefixIcon: Icon(Icons.medical_services_outlined),
+                  ),
                   items: ['Sí', 'No'].map((String value) {
                     return DropdownMenuItem<String>(
                       value: value,
                       child: Text(value),
                     );
                   }).toList(),
-                  onChanged: (newValue) => setState(() => _diabetesValue = newValue!),
+                  onChanged: (newValue) =>
+                      setState(() => _diabetesValue = newValue!),
                 ),
                 const SizedBox(height: 15),
 
@@ -190,7 +230,11 @@ class _RegistreState extends State<Registre> {
 
                 const Text(
                   "Seguridad",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
+                  ),
                 ),
                 const SizedBox(height: 15),
 
@@ -202,12 +246,18 @@ class _RegistreState extends State<Registre> {
                     labelText: 'Contraseña',
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
-                      icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                      icon: Icon(
+                        _obscurePassword
+                            ? Icons.visibility_off
+                            : Icons.visibility,
+                      ),
+                      onPressed: () =>
+                          setState(() => _obscurePassword = !_obscurePassword),
                     ),
                   ),
                   validator: (v) {
-                    if (v == null || v.isEmpty) return 'La contraseña es obligatoria';
+                    if (v == null || v.isEmpty)
+                      return 'La contraseña es obligatoria';
                     if (v.length < 6) return 'Mínimo 6 caracteres';
                     return null;
                   },
@@ -222,13 +272,21 @@ class _RegistreState extends State<Registre> {
                     labelText: 'Confirmar Contraseña',
                     prefixIcon: const Icon(Icons.lock_reset),
                     suffixIcon: IconButton(
-                      icon: Icon(_obscureConfirmPassword ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                      icon: Icon(
+                        _obscureConfirmPassword
+                            ? Icons.visibility_off
+                            : Icons.visibility,
+                      ),
+                      onPressed: () => setState(
+                        () =>
+                            _obscureConfirmPassword = !_obscureConfirmPassword,
+                      ),
                     ),
                   ),
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Confirma tu contraseña';
-                    if (v != _passwordController.text) return 'Las contraseñas no coinciden';
+                    if (v != _passwordController.text)
+                      return 'Las contraseñas no coinciden';
                     return null;
                   },
                 ),
