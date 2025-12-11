@@ -6,27 +6,18 @@ class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Lista de correos de administradores
-  final List<String> adminEmails = [
-    'admin1@ejemplo.com',
-    'admin2@ejemplo.com',
-    'super_admi@hotmail.com',
-  ];
-
-  // Obtener usuario actual
+  // Getter para obtener el usuario actual (Necesario para getUserData)
   User? get currentUser => _auth.currentUser;
 
-  // Stream del estado de autenticación
+  // Stream para escuchar cambios en la autenticación (Login/Logout)
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
-  // Verificar si el usuario es administrador
-  bool isAdmin(String email) {
-    return adminEmails.contains(email.toLowerCase());
-  }
-
-  // Iniciar sesión
+  // -----------------------------------------------------------------------------
+  // INICIAR SESIÓN
+  // -----------------------------------------------------------------------------
   Future<Map<String, dynamic>> signIn(String email, String password) async {
     try {
+      // 1. Autenticar con Firebase Auth
       UserCredential result = await _auth.signInWithEmailAndPassword(
         email: email.trim(),
         password: password,
@@ -35,34 +26,20 @@ class AuthService {
       User? user = result.user;
       
       if (user != null) {
-        // Verificar si es admin
-        bool isUserAdmin = isAdmin(user.email!);
-        
-        Map<String, dynamic>? userData;
-        
-        // Solo intentar obtener datos de Firestore si no es admin
-        // o si queremos crear el documento de admin
-        try {
-          DocumentSnapshot userDoc = await _firestore
-              .collection('users')
-              .doc(user.uid)
-              .get();
+        // 2. Obtener datos extras de Firestore (Rol, nombre, etc.)
+        DocumentSnapshot userDoc = await _firestore
+            .collection('users')
+            .doc(user.uid)
+            .get();
 
-          if (userDoc.exists) {
-            userData = userDoc.data() as Map<String, dynamic>?;
-          } else if (isUserAdmin) {
-            // Si es admin y no tiene documento, crearlo
-            await _firestore.collection('users').doc(user.uid).set({
-              'email': user.email,
-              'nombre': 'Administrador',
-              'isAdmin': true,
-              'createdAt': FieldValue.serverTimestamp(),
-            });
-          }
-        } catch (firestoreError) {
-          // Si falla Firestore pero el login fue exitoso, continuar
-          print('Error de Firestore: $firestoreError');
-        }
+        bool isUserAdmin = false;
+        Map<String, dynamic>? userData;
+
+        if (userDoc.exists) {
+          userData = userDoc.data() as Map<String, dynamic>?;
+          // Verificamos si tiene la bandera de admin
+          isUserAdmin = userData?['isAdmin'] == true;
+        } 
 
         return {
           'success': true,
@@ -71,36 +48,18 @@ class AuthService {
           'userData': userData,
         };
       }
-
       return {'success': false, 'message': 'Error desconocido'};
+      
     } on FirebaseAuthException catch (e) {
-      String message;
-      switch (e.code) {
-        case 'user-not-found':
-          message = 'No existe una cuenta con este correo';
-          break;
-        case 'wrong-password':
-          message = 'Contraseña incorrecta';
-          break;
-        case 'invalid-email':
-          message = 'Correo electrónico inválido';
-          break;
-        case 'user-disabled':
-          message = 'Esta cuenta ha sido deshabilitada';
-          break;
-        case 'invalid-credential':
-          message = 'Credenciales inválidas';
-          break;
-        default:
-          message = 'Error: ${e.message}';
-      }
-      return {'success': false, 'message': message};
+      return {'success': false, 'message': _handleAuthError(e.code)};
     } catch (e) {
       return {'success': false, 'message': 'Error inesperado: $e'};
     }
   }
 
-  // Registrar nuevo usuario con información completa
+  // -----------------------------------------------------------------------------
+  // REGISTRO DE USUARIO (CLIENTE)
+  // -----------------------------------------------------------------------------
   Future<Map<String, dynamic>> signUp({
     required String email,
     required String password,
@@ -120,6 +79,7 @@ class AuthService {
 
       if (user != null) {
         // Guardar información completa en Firestore
+        // NOTA: 'isAdmin' es false porque es un registro público
         await _firestore.collection('users').doc(user.uid).set({
           'email': email.trim(),
           'nombre': nombre,
@@ -127,8 +87,9 @@ class AuthService {
           'telefono2': telefono2 ?? '',
           'tieneDiabetes': tieneDiabetes,
           'tieneAlergia': tieneAlergia,
-          'isAdmin': isAdmin(email),
+          'isAdmin': false, 
           'createdAt': FieldValue.serverTimestamp(),
+          'role': 'client', // Definimos rol explícito
         });
 
         return {
@@ -140,32 +101,73 @@ class AuthService {
 
       return {'success': false, 'message': 'Error al crear usuario'};
     } on FirebaseAuthException catch (e) {
-      String message;
-      switch (e.code) {
-        case 'email-already-in-use':
-          message = 'Este correo ya está registrado';
-          break;
-        case 'weak-password':
-          message = 'La contraseña es muy débil (mínimo 6 caracteres)';
-          break;
-        case 'invalid-email':
-          message = 'Correo electrónico inválido';
-          break;
-        default:
-          message = 'Error: ${e.message}';
-      }
-      return {'success': false, 'message': message};
+      return {'success': false, 'message': _handleAuthError(e.code)};
     } catch (e) {
       return {'success': false, 'message': 'Error inesperado: $e'};
     }
   }
 
-  // Cerrar sesión
+  // -----------------------------------------------------------------------------
+  // REGISTRAR ADMINISTRADOR (Función Avanzada)
+  // -----------------------------------------------------------------------------
+  /// Registra un nuevo administrador sin cerrar la sesión actual
+  Future<String?> registerAdmin({
+    required String email,
+    required String password,
+    required String name,
+    required String phone,
+  }) async {
+    FirebaseApp? secondaryApp;
+    try {
+      // 1. Inicializamos una app secundaria temporal para no cerrar sesión al actual
+      secondaryApp = await Firebase.initializeApp(
+        name: 'AdminRegistration',
+        options: Firebase.app().options,
+      );
+
+      // 2. Usamos la auth de esa app secundaria
+      final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+
+      // 3. Creamos el usuario
+      final userCredential = await secondaryAuth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      // 4. Guardamos los datos en Firestore (usando la instancia principal)
+      // CORRECCIÓN: Usamos las mismas claves ('nombre', 'telefono') que en el modelo de usuario
+      await _firestore.collection('users').doc(userCredential.user!.uid).set({
+        'uid': userCredential.user!.uid,
+        'email': email,
+        'nombre': name,        // Antes decia 'name', corregido a 'nombre'
+        'telefono': phone,     // Antes decia 'phoneNumber', corregido a 'telefono'
+        'telefono2': '',
+        'role': 'admin',
+        'isAdmin': true,       // Bandera admin activada
+        'createdAt': FieldValue.serverTimestamp(),
+        'tieneDiabetes': 'No',
+        'tieneAlergia': 'No',
+      });
+
+      return null; // Null significa éxito
+    } on FirebaseAuthException catch (e) {
+      return _handleAuthError(e.code);
+    } catch (e) {
+      return "Error desconocido: $e";
+    } finally {
+      // 5. Limpiamos la app secundaria
+      await secondaryApp?.delete();
+    }
+  }
+
+  // -----------------------------------------------------------------------------
+  // OTROS MÉTODOS
+  // -----------------------------------------------------------------------------
+  
   Future<void> signOut() async {
     await _auth.signOut();
   }
 
-  // Recuperar contraseña
   Future<Map<String, dynamic>> resetPassword(String email) async {
     try {
       await _auth.sendPasswordResetEmail(email: email.trim());
@@ -174,24 +176,10 @@ class AuthService {
         'message': 'Se ha enviado un correo para restablecer tu contraseña',
       };
     } on FirebaseAuthException catch (e) {
-      String message;
-      switch (e.code) {
-        case 'user-not-found':
-          message = 'No existe una cuenta con este correo';
-          break;
-        case 'invalid-email':
-          message = 'Correo electrónico inválido';
-          break;
-        default:
-          message = 'Error: ${e.message}';
-      }
-      return {'success': false, 'message': message};
-    } catch (e) {
-      return {'success': false, 'message': 'Error inesperado: $e'};
+      return {'success': false, 'message': _handleAuthError(e.code)};
     }
   }
 
-  // Obtener datos del usuario actual
   Future<Map<String, dynamic>?> getUserData() async {
     try {
       User? user = currentUser;
@@ -210,53 +198,26 @@ class AuthService {
       return null;
     }
   }
-  /// Registra un nuevo administrador sin cerrar la sesión actual
-  Future<String?> registerAdmin({
-    required String email,
-    required String password,
-    required String name,
-    required String phone,
-  }) async {
-    FirebaseApp? secondaryApp;
-    try {
-      // 1. Inicializamos una app secundaria temporal
-      secondaryApp = await Firebase.initializeApp(
-        name: 'AdminRegistration',
-        options: Firebase.app().options,
-      );
 
-      // 2. Usamos la auth de esa app secundaria
-      final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
-
-      // 3. Creamos el usuario (esto no afecta tu sesión actual)
-      final userCredential = await secondaryAuth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-
-      // 4. Guardamos los datos en Firestore con el rol de admin
-      // Usamos la instancia principal de Firestore, ya que el admin actual tiene permisos
-      await FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid).set({
-        'uid': userCredential.user!.uid,
-        'name': name,
-        'email': email,
-        'phoneNumber': phone,
-        'role': 'admin',      // Rol clave
-        'isAdmin': true,      // Bandera explícita
-        'createdAt': FieldValue.serverTimestamp(),
-        'photoUrl': '',       // Foto vacía por defecto
-        'tieneDiabetes': 'No',
-        'tieneAlergia': 'No',
-      });
-
-      return null; // Null significa éxito
-    } on FirebaseAuthException catch (e) {
-      return e.message;
-    } catch (e) {
-      return "Error desconocido: $e";
-    } finally {
-      // 5. Borramos la app secundaria para liberar memoria
-      await secondaryApp?.delete();
+  // Helper para mensajes de error limpios
+  String _handleAuthError(String code) {
+    switch (code) {
+      case 'user-not-found':
+        return 'No existe una cuenta con este correo';
+      case 'wrong-password':
+        return 'Contraseña incorrecta';
+      case 'invalid-email':
+        return 'Correo electrónico inválido';
+      case 'user-disabled':
+        return 'Esta cuenta ha sido deshabilitada';
+      case 'email-already-in-use':
+        return 'Este correo ya está registrado';
+      case 'weak-password':
+        return 'La contraseña es muy débil (mínimo 6 caracteres)';
+      case 'invalid-credential':
+        return 'Credenciales inválidas';
+      default:
+        return 'Error de autenticación: $code';
     }
   }
 }
