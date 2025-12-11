@@ -63,47 +63,89 @@ class _LoginState extends State<Login> {
   }
 
   void _showForgotPasswordDialog() {
-    final emailController = TextEditingController();
-
+    final emailResetController = TextEditingController();
+    
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Recuperar Contraseña'),
-        content: TextField(
-          controller: emailController,
-          decoration: InputDecoration(
-            labelText: 'Correo electrónico',
-            prefixIcon: Icon(Icons.email),
-          ),
-          keyboardType: TextInputType.emailAddress,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              final result = await _authService.resetPassword(
-                emailController.text,
-              );
+      builder: (dialogContext) { // Renombramos a dialogContext para no confundir
+        bool isResetting = false; 
 
-              if (!mounted) return;
-
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(result['message']),
-                  backgroundColor: result['success']
-                      ? Colors.green
-                      : Colors.red,
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text('Recuperar Contraseña'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    "Ingresa tu correo registrado y te enviaremos un enlace, verificar en su bandeja de SPAM",
+                    style: TextStyle(fontSize: 14, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 15),
+                  TextField(
+                    controller: emailResetController,
+                    decoration: const InputDecoration(
+                      labelText: 'Correo electrónico',
+                      prefixIcon: Icon(Icons.email_outlined),
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                  if (isResetting) ...[
+                    const SizedBox(height: 20),
+                    const CircularProgressIndicator(),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isResetting ? null : () => Navigator.pop(dialogContext),
+                  child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
                 ),
-              );
-            },
-            child: Text('Enviar'),
-          ),
-        ],
-      ),
+                ElevatedButton(
+                  onPressed: isResetting
+                      ? null
+                      : () async {
+                          if (emailResetController.text.trim().isEmpty) {
+                             ScaffoldMessenger.of(dialogContext).showSnackBar(
+                                const SnackBar(content: Text('Por favor escribe un correo')),
+                             );
+                             return;
+                          }
+
+                          // 1. Activamos carga (Solo si el diálogo sigue abierto)
+                          if (dialogContext.mounted) {
+                            setStateDialog(() => isResetting = true);
+                          }
+
+                          // 2. Llamamos al servicio (Guardamos el resultado)
+                          final result = await _authService.resetPassword(
+                            emailResetController.text,
+                          );
+
+                          // 3. Verificamos si el DIÁLOGO sigue abierto para cerrarlo
+                          if (dialogContext.mounted) {
+                             Navigator.pop(dialogContext);
+                          }
+
+                          // 4. Mostramos el resultado usando el context de la PANTALLA PRINCIPAL
+                          // (Usamos 'mounted' del _LoginState, no del diálogo)
+                          if (mounted) {
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              SnackBar(
+                                content: Text(result['message']),
+                                backgroundColor: result['success'] ? Colors.green : Colors.red,
+                              ),
+                            );
+                          }
+                        },
+                  child: const Text('Enviar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
