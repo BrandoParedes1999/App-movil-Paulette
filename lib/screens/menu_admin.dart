@@ -1,14 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:paulette/models/appointment.dart';
+
+// IMPORTS DE TUS PANTALLAS
 import 'package:paulette/screens/citas_admin.dart';
-import 'package:paulette/screens/clientes_admin.dart';
 import 'package:paulette/screens/estadistica_admin.dart';
-import 'package:paulette/screens/manicure/manicura_admin.dart';
+import 'package:paulette/screens/settings_admin.dart';
+import 'package:paulette/screens/clientes_admin.dart';
 import 'package:paulette/screens/marketing_admin.dart';
 import 'package:paulette/screens/pago_admin.dart';
+import 'package:paulette/screens/register_admin.dart';
+import 'package:paulette/screens/manicure/manicura_admin.dart';
 import 'package:paulette/screens/pedicura/pedicura_admin.dart';
-import 'package:paulette/screens/settings_admin.dart';
-import 'package:paulette/services/servicio_mapa.dart';
-import 'package:paulette/services/auth_service.dart';
+import 'package:paulette/screens/ingreso_reporte.dart';
+import 'package:paulette/services/appointment_service.dart'; // O el que uses para reportes
 
 class MenuAdmin extends StatefulWidget {
   const MenuAdmin({super.key});
@@ -18,330 +25,158 @@ class MenuAdmin extends StatefulWidget {
 }
 
 class _MenuAdminState extends State<MenuAdmin> {
-  // Función para cerrar sesión
-  Future<void> _cerrarSesion() async {
-    // Mostrar diálogo de confirmación
-    bool? confirmar = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Row(
-            children: [
-              Icon(Icons.logout, color: Color(0xFFE91E63)),
-              SizedBox(width: 10),
-              Text('Cerrar Sesión'),
-            ],
-          ),
-          content: Text('¿Estás seguro de que deseas cerrar sesión?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text('Cancelar', style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Color(0xFFE91E63),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              child: Text('Cerrar Sesión'),
-            ),
-          ],
-        );
-      },
-    );
+  int _currentIndex = 0;
+  final User? currentUser = FirebaseAuth.instance.currentUser;
 
-    // Si el usuario confirmó, proceder a cerrar sesión
-    if (confirmar == true && mounted) {
-      // Mostrar mensaje de cierre
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.check_circle, color: Colors.white, size: 20),
-              SizedBox(width: 10),
-              Text('Sesión cerrada'),
-            ],
-          ),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          duration: Duration(milliseconds: 800),
-        ),
-      );
-
-      // Esperar un momento antes de navegar
-      await Future.delayed(Duration(milliseconds: 500));
-
-      // Navegar a la pantalla de login y eliminar todas las rutas anteriores
-      if (mounted) {
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          '/login', // Cambia esto por la ruta de tu pantalla de login
-          (Route<dynamic> route) => false,
-        );
-      }
-    }
-  }
+  // Títulos dinámicos según la pestaña
+  final List<String> _titles = [
+    "Agenda del Día",
+    "Centro de Gestión", // El menú grid
+    "Panel de Control", // Estadísticas
+    "Configuración",
+  ];
 
   @override
   Widget build(BuildContext context) {
+    // Definimos las vistas aquí para poder pasar el contexto si es necesario
+    final List<Widget> _views = [
+      const AdminAppointmentsPanel(), // 0: Agenda (Lo más importante)
+      const GestionGridScreen(), // 1: Grid de Gestión (Clientes, Servicios, etc.)
+      const EstadisticaAdmin(), // 2: Estadísticas/Resumen
+      const SettingsAdmin(), // 3: Ajustes
+    ];
+
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: Colors.grey[50], // Fondo suave
+      // APPBAR PERSONALIZADO
       appBar: AppBar(
+        automaticallyImplyLeading: false, // Sin botón atrás
+        backgroundColor: Colors.white,
         elevation: 0,
-        backgroundColor: Colors.transparent,
-        flexibleSpace: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFFE91E63), Color(0xFFF48FB1)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-        ),
         title: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.spa, color: Colors.white),
-            SizedBox(width: 8),
-            Text(
-              "Paulette",
-              style: TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                letterSpacing: 1.2,
+            // Avatar pequeño o Logo
+            CircleAvatar(
+              backgroundColor: Colors.pinkAccent.withOpacity(0.1),
+              child: const Icon(
+                Icons.admin_panel_settings,
+                color: Colors.pinkAccent,
               ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _titles[_currentIndex],
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                // Carga asíncrona del nombre del admin
+                StreamBuilder<DocumentSnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(currentUser?.uid)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasData && snapshot.data!.exists) {
+                      var data = snapshot.data!.data() as Map<String, dynamic>;
+                      String nombre =
+                          data['name']?.toString().split(' ')[0] ?? 'Admin';
+                      return Text(
+                        "Hola, $nombre",
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 12,
+                        ),
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
+              ],
             ),
           ],
         ),
-        centerTitle: true,
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8.0),
-            child: IconButton(
-              icon: Icon(Icons.logout_rounded, color: Colors.white, size: 26),
-              tooltip: 'Cerrar Sesión',
-              onPressed: _cerrarSesion,
-            ),
+          // Acceso rápido a Logout (aunque esté en settings, es bueno tenerlo)
+          IconButton(
+            icon: const Icon(Icons.logout_rounded, color: Colors.grey),
+            tooltip: 'Cerrar Sesión',
+            onPressed: () => _confirmSignOut(context),
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // Header con frase inspiradora
-            Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFFE91E63), Color(0xFFF48FB1)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(30),
-                  bottomRight: Radius.circular(30),
-                ),
-              ),
-              padding: EdgeInsets.fromLTRB(20, 20, 20, 30),
-              child: Column(
-                children: [
-                  Icon(Icons.auto_awesome, color: Colors.white, size: 40),
-                  SizedBox(height: 10),
-                  Text(
-                    "La belleza está en los detalles",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  SizedBox(height: 5),
-                  Text(
-                    "¡Inspírate y crea diseños únicos!",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 14,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                ],
-              ),
-            ),
 
-            // Grid de opciones principales
-            Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: GridView.count(
-                shrinkWrap: true,
-                physics: NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                crossAxisSpacing: 15,
-                mainAxisSpacing: 15,
-                children: [
-                  _buildMenuCard(
-                    context,
-                    icon: Icons.brush,
-                    title: "Diseños de\nManicura",
-                    gradient: [Color(0xFFFF6B9D), Color(0xFFFFA0C4)],
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ManicuraAdmin(),
-                        ),
-                      );
-                    },
-                  ),
-                  _buildMenuCard(
-                    context,
-                    icon: Icons.wb_sunny,
-                    title: "Diseños de\nPedicura",
-                    gradient: [Color(0xFFBA68C8), Color(0xFFE1BEE7)],
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => PedicuraAdmin(),
-                        ),
-                      );
-                    },
-                  ),
-                  _buildMenuCard(
-                    context,
-                    icon: Icons.calendar_today,
-                    title: "Gestión de\nCitas",
-                    gradient: [Color(0xFF42A5F5), Color(0xFF90CAF9)],
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const AdminAppointmentsPanel(),
-                        ),
-                      );
-                    },
-                  ),
-                  _buildMenuCard(
-                    context,
-                    icon: Icons.assessment,
-                    title: "Reportes y\nEstadísticas",
-                    gradient: [Color(0xFF66BB6A), Color(0xFFA5D6A7)],
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => EstadisticaAdmin(),
-                        ),
-                      );
-                    },
-                  ),
+      // CUERPO (Mantiene el estado de las pestañas)
+      body: IndexedStack(index: _currentIndex, children: _views),
 
-                  _buildMenuCard(
-                    context,
-                    icon: Icons.campaign,
-                    title: "Marketing y\nPromociones",
-                    gradient: [Colors.purple.shade300, Colors.purple.shade100],
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const MarketingAdmin(),
-                        ),
-                      );
-                    },
-                  ),
-                  _buildMenuCard(
-                    context,
-                    icon: Icons.people_alt,
-                    title: "Mis\nClientes",
-                    gradient: [
-                      Color(0xFFFF9800),
-                      Color(0xFFFFB74D),
-                    ], // Color naranja para diferenciar
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const ClientesAdmin(),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+      // BARRA DE NAVEGACIÓN INFERIOR
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-              color: Colors.black12,
+              color: Colors.black.withOpacity(0.05),
               blurRadius: 10,
-              offset: Offset(0, -2),
+              offset: const Offset(0, -5),
             ),
           ],
         ),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 15.0, vertical: 10),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildBottomButton(
-                  context,
-                  icon: Icons.location_on,
-                  label: "Ubicación",
-                  color: Color(0xFFE91E63),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => UbicacionOsmScreen(),
-                      ),
-                    );
-                  },
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: BottomNavigationBar(
+              currentIndex: _currentIndex,
+              onTap: (index) => setState(() => _currentIndex = index),
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              type: BottomNavigationBarType.fixed,
+              selectedItemColor: Colors.pinkAccent,
+              unselectedItemColor: Colors.grey,
+              selectedLabelStyle: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+              items: [
+                BottomNavigationBarItem(
+                  icon: StreamBuilder<List<Appointment>>(
+                    stream: AppointmentService().getAllAppointments(),
+                    builder: (context, snapshot) {
+                      // Contamos cuántas citas están en estado "pending"
+                      final pendingCount =
+                          snapshot.data
+                              ?.where((a) => a.status == "pending")
+                              .length ??
+                          0;
+
+                      return Badge(
+                        label: Text('$pendingCount'),
+                        isLabelVisible: pendingCount > 0,
+                        child: const Icon(Icons.calendar_month_outlined),
+                      );
+                    },
+                  ),
+                  activeIcon: const Icon(Icons.calendar_month),
+                  label: 'Agenda',
                 ),
-                _buildBottomButton(
-                  context,
-                  icon: Icons.payment,
-                  label: "Pagos",
-                  color: Color(0xFF42A5F5),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => FormasPago()),
-                    );
-                  },
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.grid_view), // Icono de menú
+                  activeIcon: Icon(Icons.grid_view_rounded),
+                  label: 'Gestión',
                 ),
-                _buildBottomButton(
-                  context,
-                  icon: Icons.settings,
-                  label: "Ajustes",
-                  color: const Color(0xFF66BB6A),
-                  onTap: () {
-                    // ✅ AHORA NAVEGA A AJUSTES
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const SettingsAdmin(),
-                      ),
-                    );
-                  },
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.bar_chart_rounded),
+                  activeIcon: Icon(Icons.bar_chart),
+                  label: 'Reportes',
+                ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.settings_outlined),
+                  activeIcon: Icon(Icons.settings),
+                  label: 'Ajustes',
                 ),
               ],
             ),
@@ -351,89 +186,223 @@ class _MenuAdminState extends State<MenuAdmin> {
     );
   }
 
-  Widget _buildMenuCard(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required List<Color> gradient,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: gradient,
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+  // Confirmación de salida elegante
+  void _confirmSignOut(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Cerrar Sesión"),
+        content: const Text("¿Estás seguro de que quieres salir?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancelar", style: TextStyle(color: Colors.grey)),
           ),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: gradient[0].withOpacity(0.3),
-              blurRadius: 8,
-              offset: Offset(0, 4),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await FirebaseAuth.instance.signOut();
+              if (mounted) Navigator.pushReplacementNamed(context, '/login');
+            },
+            child: const Text("Salir", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// WIDGET INTERNO: GRID DE GESTIÓN (Para organizar todas tus pantallas)
+// ---------------------------------------------------------------------------
+class GestionGridScreen extends StatelessWidget {
+  const GestionGridScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Servicios",
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey,
             ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                shape: BoxShape.circle,
+          ),
+          const SizedBox(height: 10),
+
+          _buildGrid([
+            _MenuOption(
+              title: "Manicura",
+              icon: FontAwesomeIcons.handSparkles,
+              color: Colors.purple.shade100,
+              iconColor: Colors.purple,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ManicuraAdmin()),
               ),
-              child: Icon(icon, size: 40, color: Colors.white),
             ),
-            SizedBox(height: 15),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0),
-              child: Text(
-                title,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  height: 1.2,
-                ),
+            _MenuOption(
+              title: "Pedicura",
+              icon: FontAwesomeIcons.shoePrints,
+              color: Colors.blue.shade100,
+              iconColor: Colors.blue,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PedicuraAdmin()),
               ),
             ),
-          ],
-        ),
+          ]),
+
+          const SizedBox(height: 20),
+          const Text(
+            "Operaciones",
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          _buildGrid([
+            _MenuOption(
+              title: "Clientes",
+              icon: Icons.people_alt_rounded,
+              color: Colors.orange.shade100,
+              iconColor: Colors.orange,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ClientesAdmin()),
+              ),
+            ),
+            _MenuOption(
+              title: "Pagos",
+              icon: Icons.attach_money_rounded,
+              color: Colors.green.shade100,
+              iconColor: Colors.green,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const FormasPago()),
+              ),
+            ),
+            _MenuOption(
+              title: "Marketing",
+              icon: Icons.campaign_rounded,
+              color: Colors.red.shade100,
+              iconColor: Colors.red,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const MarketingAdmin()),
+              ),
+            ),
+            _MenuOption(
+              title: "Ingreso Manual",
+              icon: Icons.post_add_rounded,
+              color: Colors.teal.shade100,
+              iconColor: Colors.teal,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const IngresoReporte()),
+              ),
+            ),
+          ]),
+
+          const SizedBox(height: 20),
+          const Text(
+            "Seguridad",
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          _buildGrid([
+            _MenuOption(
+              title: "Nuevo Admin",
+              icon: Icons.person_add_alt_1_rounded,
+              color: Colors.grey.shade200,
+              iconColor: Colors.black87,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const RegisterAdminPage()),
+              ),
+            ),
+          ]),
+        ],
       ),
     );
   }
 
-  Widget _buildBottomButton(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 28),
-            SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[700],
-                fontWeight: FontWeight.w500,
+  Widget _buildGrid(List<Widget> children) {
+    return GridView.count(
+      shrinkWrap: true,
+      physics:
+          const NeverScrollableScrollPhysics(), // El scroll lo maneja el padre
+      crossAxisCount: 2, // 2 columnas
+      crossAxisSpacing: 15,
+      mainAxisSpacing: 15,
+      childAspectRatio:
+          1.5, // Proporción de las tarjetas (más anchas que altas)
+      children: children,
+    );
+  }
+}
+
+// TARJETA DE MENÚ REUTILIZABLE
+class _MenuOption extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final Color color;
+  final Color iconColor;
+  final VoidCallback onTap;
+
+  const _MenuOption({
+    required this.title,
+    required this.icon,
+    required this.color,
+    required this.iconColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      elevation: 2,
+      shadowColor: Colors.black12,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.all(15),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                child: FaIcon(icon, color: iconColor, size: 24),
               ),
-            ),
-          ],
+              const SizedBox(height: 10),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       ),
     );

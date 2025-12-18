@@ -20,9 +20,9 @@ class UserService {
       if (user == null) return null;
 
       final doc = await _db.collection("users").doc(user.uid).get();
-      
+
       if (!doc.exists) return null;
-      
+
       return UserModel.fromFirestore(doc);
     } catch (e) {
       print("🔥 Error al obtener usuario: $e");
@@ -35,11 +35,7 @@ class UserService {
     final user = _auth.currentUser;
     if (user == null) return Stream.value(null);
 
-    return _db
-        .collection("users")
-        .doc(user.uid)
-        .snapshots()
-        .map((doc) {
+    return _db.collection("users").doc(user.uid).snapshots().map((doc) {
       if (!doc.exists) return null;
       return UserModel.fromFirestore(doc);
     });
@@ -57,15 +53,14 @@ class UserService {
       final user = _auth.currentUser;
       if (user == null) return false;
 
-      await _db.collection("users").doc(user.uid).update({
-        "fcmToken": token,
-      });
+      await _db.collection("users").doc(user.uid).update({"fcmToken": token});
       return true;
     } catch (e) {
       print("🔥 Error al actualizar FCM token: $e");
       return false;
     }
   }
+
   /// 🔹 Obtener TODOS los clientes (para el Admin)
   Stream<List<UserModel>> getAllClients() {
     return _db
@@ -73,7 +68,24 @@ class UserService {
         .where("isAdmin", isEqualTo: false) // Solo clientes
         .snapshots()
         .map((snapshot) {
+          return snapshot.docs
+              .map((doc) => UserModel.fromFirestore(doc))
+              .toList();
+        });
+  }
+
+  /// 🔹 Obtener todos los administradores (para notificaciones masivas)
+  static Future<List<UserModel>> getAdmins() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection("users")
+          .where("isAdmin", isEqualTo: true) // Filtramos por el campo booleano
+          .get();
+
       return snapshot.docs.map((doc) => UserModel.fromFirestore(doc)).toList();
-    });
+    } catch (e) {
+      print("🔥 Error al obtener administradores: $e");
+      return [];
+    }
   }
 }

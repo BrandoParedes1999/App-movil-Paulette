@@ -9,11 +9,11 @@ import 'package:paulette/screens/menu_admin.dart';
 
 // Firebase
 import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
+import 'firebase_options.dart'; 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -31,29 +31,32 @@ class MainApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-
     const primaryColor = Colors.black;
     const accentColor = Color.fromARGB(162, 244, 175, 55);
 
     return MaterialApp(
-        //debugShowCheckedModelBanner: false,
-        //title: 'Paulette App',
-
-        theme: ThemeData(
-          useMaterial3: true,
-          primaryColor: primaryColor,
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: primaryColor,
-            primary: primaryColor,
-            secondary: accentColor,
-          ),
-          inputDecorationTheme: InputDecorationTheme(
+      //debugShowCheckedModelBanner: false,
+      //title: 'Paulette App',
+      theme: ThemeData(
+        useMaterial3: true,
+        primaryColor: primaryColor,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: primaryColor,
+          primary: primaryColor,
+          secondary: accentColor,
+        ),
+        inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: Colors.grey[100],
           prefixIconColor: Colors.grey[600],
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 16,
+          ),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(15), // Bordes redondeados modernos
+            borderRadius: BorderRadius.circular(
+              15,
+            ), // Bordes redondeados modernos
             borderSide: BorderSide.none,
           ),
           enabledBorder: OutlineInputBorder(
@@ -91,16 +94,13 @@ class MainApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      supportedLocales: const [
-        Locale('es', 'ES'),
-      ],
+      supportedLocales: const [Locale('es', 'ES')],
       initialRoute: '/login',
       routes: {
         '/login': (context) => const Login(),
         '/menuadmin': (context) => const MenuAdmin(),
         '/menuclient': (context) => const MenuClient(),
         '/registre': (context) => const Registre(),
-       
       },
     );
   }

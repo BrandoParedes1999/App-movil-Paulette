@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:paulette/services/notificacion_Service.dart';
+import 'package:paulette/services/user_service.dart';
 import '../models/appointment.dart';
 
 class AppointmentService {
@@ -8,8 +9,16 @@ class AppointmentService {
 
   // ✅ LISTA MAESTRA DE HORARIOS: Única fuente para toda la app
   static const List<String> timeSlots = [
-    "09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM",
-    "01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM", "06:00 PM"
+    "09:00 AM",
+    "10:00 AM",
+    "11:00 AM",
+    "12:00 PM",
+    "01:00 PM",
+    "02:00 PM",
+    "03:00 PM",
+    "04:00 PM",
+    "05:00 PM",
+    "06:00 PM",
   ];
 
   // ---------------------------------------------------------
@@ -17,10 +26,31 @@ class AppointmentService {
   // ---------------------------------------------------------
   Future<bool> createAppointment(Appointment appointment) async {
     try {
-      await _db.collection("appointments").doc(appointment.id).set(appointment.toMap());
+      // 1. Guardar la cita en Firestore
+      await _db
+          .collection("appointments")
+          .doc(appointment.id)
+          .set(appointment.toMap());
+
+      // 2. Obtener la lista dinámica de administradores
+      final admins = await UserService.getAdmins();
+
+      // 3. Notificar a cada administrador encontrado
+      if (admins.isNotEmpty) {
+        for (var admin in admins) {
+          await _notificationService.notifyAdminNewAppointment(
+            adminId: admin.id, // ID dinámico de cada admin
+            clientName: appointment.userName ?? "Un cliente",
+            designTitle: appointment.designTitle,
+            date: appointment.date,
+            time: appointment.time,
+          );
+        }
+      }
+
       return true;
     } catch (e) {
-      print("🔥 Error al crear cita: $e");
+      print("🔥 Error al crear cita y notificar a los admins: $e");
       return false;
     }
   }
@@ -45,7 +75,7 @@ class AppointmentService {
       } else if (startTime != null && endTime != null) {
         final startIndex = timeSlots.indexOf(startTime);
         final endIndex = timeSlots.indexOf(endTime);
-        
+
         if (startIndex != -1 && endIndex != -1 && startIndex <= endIndex) {
           slotsToBlock = timeSlots.sublist(startIndex, endIndex + 1);
         } else {
@@ -58,7 +88,7 @@ class AppointmentService {
       // Crear documentos de bloqueo
       for (String time in slotsToBlock) {
         final docRef = _db.collection("appointments").doc();
-        
+
         // Normalizar fecha (sin horas/minutos)
         final cleanDate = DateTime(date.year, date.month, date.day);
 
@@ -134,14 +164,16 @@ class AppointmentService {
   // 🔹 Métodos Auxiliares (Getters, Updates, Deletes)
   // ---------------------------------------------------------
   Stream<List<Appointment>> getAllAppointments() {
-    return _db.collection("appointments")
+    return _db
+        .collection("appointments")
         .orderBy("createdAt", descending: true)
         .snapshots()
         .map((s) => s.docs.map((d) => Appointment.fromMap(d.data())).toList());
   }
 
   Stream<List<Appointment>> getAppointmentsByUser(String userId) {
-    return _db.collection("appointments")
+    return _db
+        .collection("appointments")
         .where("userId", isEqualTo: userId)
         .orderBy("createdAt", descending: true)
         .snapshots()
@@ -151,46 +183,80 @@ class AppointmentService {
   Future<bool> updateStatus(String id, String status) async {
     try {
       final doc = await _db.collection("appointments").doc(id).get();
-      if(!doc.exists) return false;
+      if (!doc.exists) return false;
       final appt = Appointment.fromMap(doc.data()!);
-      
+
       await _db.collection("appointments").doc(id).update({"status": status});
-      
-      if(status == "approved") {
-        _notificationService.notifyAppointmentApproved(userId: appt.userId, appointmentId: id, designTitle: appt.designTitle, date: appt.date, time: appt.time);
+
+      if (status == "approved") {
+        _notificationService.notifyAppointmentApproved(
+          userId: appt.userId,
+          appointmentId: id,
+          designTitle: appt.designTitle,
+          date: appt.date,
+          time: appt.time,
+        );
       } else if (status == "cancelled") {
-        _notificationService.notifyAppointmentRejected(userId: appt.userId, appointmentId: id, designTitle: appt.designTitle);
+        _notificationService.notifyAppointmentRejected(
+          userId: appt.userId,
+          appointmentId: id,
+          designTitle: appt.designTitle,
+        );
       }
       return true;
-    } catch(e) { return false; }
+    } catch (e) {
+      return false;
+    }
   }
 
-  Future<bool> updateStatusAndDetails(String id, String status, double price, int duration) async {
+  Future<bool> updateStatusAndDetails(
+    String id,
+    String status,
+    double price,
+    int duration,
+  ) async {
     try {
       final doc = await _db.collection("appointments").doc(id).get();
-      if(!doc.exists) return false;
+      if (!doc.exists) return false;
       final appt = Appointment.fromMap(doc.data()!);
 
       await _db.collection("appointments").doc(id).update({
-        "status": status, "price": price, "durationMinutes": duration
+        "status": status,
+        "price": price,
+        "durationMinutes": duration,
       });
-      
-      if(status == "approved") {
-        _notificationService.notifyAppointmentApproved(userId: appt.userId, appointmentId: id, designTitle: appt.designTitle, date: appt.date, time: appt.time);
+
+      if (status == "approved") {
+        _notificationService.notifyAppointmentApproved(
+          userId: appt.userId,
+          appointmentId: id,
+          designTitle: appt.designTitle,
+          date: appt.date,
+          time: appt.time,
+        );
       }
       return true;
-    } catch(e) { return false; }
+    } catch (e) {
+      return false;
+    }
   }
-  
+
   Future<bool> deleteAppointment(String id) async {
-    try { await _db.collection("appointments").doc(id).delete(); return true; } catch(e) { return false; }
+    try {
+      await _db.collection("appointments").doc(id).delete();
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
-  
+
   Future<bool> hasRating(String id) async {
-    try { 
+    try {
       final doc = await _db.collection("appointments").doc(id).get();
       return doc.exists && (doc.data()?["hasRating"] ?? false);
-    } catch(e) { return false; }
+    } catch (e) {
+      return false;
+    }
   }
 
   /// ---------------------------------------------------------
@@ -201,12 +267,13 @@ class AppointmentService {
     try {
       // Definimos "antiguo" como todo lo anterior al inicio del día de hoy
       final now = DateTime.now();
-      final startOfToday = DateTime(now.year, now.month, now.day); 
+      final startOfToday = DateTime(now.year, now.month, now.day);
 
       // Buscamos documentos viejos
       // NOTA: Esto requiere un índice compuesto en Firestore si hay muchos datos
       // (date < today)
-      final snapshot = await _db.collection("appointments")
+      final snapshot = await _db
+          .collection("appointments")
           .where("date", isLessThan: Timestamp.fromDate(startOfToday))
           .get();
 
@@ -224,8 +291,10 @@ class AppointmentService {
         // 2. Borrar 'cancelled' antiguos (historial basura)
         // 3. Borrar 'pending' antiguos (citas que nunca se aprobaron y ya pasó la fecha)
         // 4. (Opcional) NO borrar 'completed' ni 'approved' si quieres historial de ventas
-        
-        if (status == 'blocked' || status == 'cancelled' || status == 'pending') {
+
+        if (status == 'blocked' ||
+            status == 'cancelled' ||
+            status == 'pending') {
           batch.delete(doc.reference);
           count++;
         }
@@ -242,10 +311,15 @@ class AppointmentService {
 
   // ⭐ NUEVO: Calificar Cita (Rating)
   // ---------------------------------------------------------
-  Future<void> rateAppointment(String appointmentId, String designId, double rating, String comment) async {
+  Future<void> rateAppointment(
+    String appointmentId,
+    String designId,
+    double rating,
+    String comment,
+  ) async {
     try {
       final WriteBatch batch = _db.batch();
-      
+
       // 1. Crear el documento de calificación
       final ratingRef = _db.collection('ratings').doc();
       batch.set(ratingRef, {

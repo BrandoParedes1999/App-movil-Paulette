@@ -36,6 +36,22 @@ class NotificationService {
     }
   }
 
+  /// 📨 Notificar al Admin sobre una nueva solicitud de cita
+  Future<bool> notifyAdminNewAppointment({
+    required String adminId, // 1. Declaramos que esta función RECIBE un adminId
+    required String clientName,
+    required String designTitle,
+    required DateTime date,
+    required String time,
+  }) async {
+    return await createNotification(
+      userId: adminId, // 2. Ahora sí podemos usar la variable aquí
+      title: "📢 Nueva Cita Solicitada",
+      body: "$clientName ha solicitado $designTitle para el ${_formatDate(date)} a las $time.",
+      type: "new_appointment_request",
+    );
+  }
+
   /// 📨 Notificar aprobación de cita
   Future<bool> notifyAppointmentApproved({
     required String userId,
@@ -47,7 +63,8 @@ class NotificationService {
     return await createNotification(
       userId: userId,
       title: "¡Cita Aprobada! 🎉",
-      body: "Tu cita de $designTitle para el ${_formatDate(date)} a las $time ha sido aprobada.",
+      body:
+          "Tu cita de $designTitle para el ${_formatDate(date)} a las $time ha sido aprobada.",
       type: "appointment_approved",
       appointmentId: appointmentId,
     );
@@ -62,7 +79,8 @@ class NotificationService {
     return await createNotification(
       userId: userId,
       title: "Cita No Disponible 😔",
-      body: "Lo sentimos, la cita de $designTitle no pudo ser confirmada. Por favor, selecciona otro horario.",
+      body:
+          "Lo sentimos, la cita de $designTitle no pudo ser confirmada. Por favor, selecciona otro horario.",
       type: "appointment_rejected",
       appointmentId: appointmentId,
     );
@@ -79,7 +97,8 @@ class NotificationService {
     return await createNotification(
       userId: userId,
       title: "Recordatorio de Cita ⏰",
-      body: "Tienes una cita de $designTitle mañana ${_formatDate(date)} a las $time. ¡Te esperamos!",
+      body:
+          "Tienes una cita de $designTitle mañana ${_formatDate(date)} a las $time. ¡Te esperamos!",
       type: "reminder",
       appointmentId: appointmentId,
     );
@@ -94,10 +113,10 @@ class NotificationService {
         .limit(50)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => AppNotification.fromMap(doc.data()))
-          .toList();
-    });
+          return snapshot.docs
+              .map((doc) => AppNotification.fromMap(doc.data()))
+              .toList();
+        });
   }
 
   /// ✅ Marcar como leída
@@ -158,8 +177,18 @@ class NotificationService {
 
   String _formatDate(DateTime date) {
     final months = [
-      'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
+      'enero',
+      'febrero',
+      'marzo',
+      'abril',
+      'mayo',
+      'junio',
+      'julio',
+      'agosto',
+      'septiembre',
+      'octubre',
+      'noviembre',
+      'diciembre',
     ];
     return "${date.day} de ${months[date.month - 1]}";
   }
